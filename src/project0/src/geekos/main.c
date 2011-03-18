@@ -22,6 +22,24 @@
 #include <geekos/keyboard.h>
 
 
+/*
+ * Kernel thread that echoes pressed keys and prints count
+ */
+static void Echo_Keys(ulong_t arg)
+{
+    ulong_t count = 0;
+
+    while (true) {
+
+        Keycode code = Wait_For_Key();
+        KASSERT(code != KEY_UNKNOWN);
+
+        if (!( code & KEY_RELEASE_FLAG ))
+	    Print("%x [%ld]\n", code, count++);
+
+	Yield();
+    }
+}
 
 
 /*
@@ -42,21 +60,17 @@ void Main(struct Boot_Info* bootInfo)
     Init_Timer();
     Init_Keyboard();
 
-
     Set_Current_Attr(ATTRIB(BLACK, GREEN|BRIGHT));
     Print("Welcome to GeekOS!\n");
     Set_Current_Attr(ATTRIB(BLACK, GRAY));
+    
 
-
-    TODO("Start a kernel thread to echo pressed keys and print counts");
-
+    Start_Kernel_Thread(Echo_Keys, 0, PRIORITY_NORMAL, false);
 
 
     /* Now this thread is done. */
     Exit(0);
 }
-
-
 
 
 
