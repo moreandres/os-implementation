@@ -29,16 +29,24 @@ static void Echo_Keys(ulong_t arg)
 {
     ulong_t count = 0;
 
+    Print("Hello from Andres\n");
+
     while (true) {
 
         Keycode code = Wait_For_Key();
         KASSERT(code != KEY_UNKNOWN);
 
         if (!( code & KEY_RELEASE_FLAG ))
-	    Print("%x [%ld]\n", code, count++);
+            Print("%c [%ld]\n", code, count++);
 
-	Yield();
+        if ((code == (KEY_CTRL_FLAG | 'd')) ||
+            (code == (KEY_CTRL_FLAG | KEY_SHIFT_FLAG | 'D')))
+            break;
+
+        Yield();
     }
+
+    Print("Goodbye from Andres\n");
 }
 
 
