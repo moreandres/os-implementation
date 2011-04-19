@@ -37,10 +37,32 @@
  * Create a new user context of given size
  */
 
-/* TODO: Implement
 static struct User_Context* Create_User_Context(ulong_t size)
-*/
+{
+	KASSERT(size > 0);
 
+	struct User_Context * context = Malloc(size);
+	KASSERT(context);
+
+	struct Segment_Descriptor* desc = Allocate_Segment_Descriptor();
+	KASSERT(desc);
+	
+	Init_LDT_Descriptor(desc, desc, 1);
+
+	ushort_t selector = Selector(USER_PRIVILEGE, false, 1);
+	KASSERT(selector);
+
+	Init_Code_Segment_Descriptor(desc, 0x0, 1, USER_PRIVILEGE);
+	Init_Data_Segment_Descriptor(desc, 0x0, 1, USER_PRIVILEGE);
+
+	ushort_t code_selector = Selector(USER_PRIVILEGE, false, 1);
+	KASSERT(code_selector);
+
+	ushort_t data_selector = Selector(USER_PRIVILEGE, false, 1);
+	KASSERT(data_selector);
+
+	return context;
+}
 
 static bool Validate_User_Memory(struct User_Context* userContext,
     ulong_t userAddr, ulong_t bufSize)
@@ -98,18 +120,38 @@ int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
     struct Exe_Format *exeFormat, const char *command,
     struct User_Context **pUserContext)
 {
-    /*
-     * Hints:
-     * - Determine where in memory each executable segment will be placed
-     * - Determine size of argument block and where it memory it will
-     *   be placed
-     * - Copy each executable segment into memory
-     * - Format argument block in memory
-     * - In the created User_Context object, set code entry point
-     *   address, argument block address, and initial kernel stack pointer
-     *   address
-     */
-    TODO("Load a user executable into a user memory space using segmentation");
+	KASSERT(exeFileData); KASSERT(exeFileLength > 0); KASSERT(exeFormat);
+	KASSERT(command); KASSERT(pUserContext);
+	
+	int i = 0;
+	unsigned int highest = 0;
+	for (i = 0; exeFormat->numSegments; i++) {
+		if (exeFormat->segmentList[i].startAddress > highest)
+			highest = exeFormat->segmentList[i].startAddress;
+	}
+	KASSERT(highest > 0);
+
+	unsigned int numArgs = -1;
+	ulong_t argBlockSize = -1;
+	Get_Argument_Block_Size(command, &numArgs, &argBlockSize);
+	KASSERT(numArgs > 0); KASSERT(argBlockSize > 0);
+
+	unsigned int size = Round_Up_To_Page(highest);
+	KASSERT(size > 0);
+
+	size += DEFAULT_USER_STACK_SIZE;
+	KASSERT(size > 0);
+
+	size += argBlockSize;
+	KASSERT(size > 0);
+
+	*pUserContext = Create_User_Context(size);
+
+	(*pUserContext)->entryAddr = exeFormat->entryAddr;
+	(*pUserContext)->argBlockAddr = 0x1000;
+	(*pUserContext)->stackPointerAddr = 0x1000;
+
+	return 0;
 }
 
 /*

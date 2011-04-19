@@ -85,20 +85,28 @@ void Detach_User_Context(struct Kernel_Thread* kthread)
  */
 int Spawn(const char *program, const char *command, struct Kernel_Thread **pThread)
 {
-    /*
-     * Hints:
-     * - Call Read_Fully() to load the entire executable into a memory buffer
-     * - Call Parse_ELF_Executable() to verify that the executable is
-     *   valid, and to populate an Exe_Format data structure describing
-     *   how the executable should be loaded
-     * - Call Load_User_Program() to create a User_Context with the loaded
-     *   program
-     * - Call Start_User_Thread() with the new User_Context
-     *
-     * If all goes well, store the pointer to the new thread in
-     * pThread and return 0.  Otherwise, return an error code.
-     */
-    TODO("Spawn a process by reading an executable from a filesystem");
+	KASSERT(program); KASSERT(command); KASSERT(pThread);
+
+	int ret = ENOTFOUND;
+	void *exeFileData = NULL;
+	ulong_t pLen = -1;
+
+	ret = Read_Fully(program, &exeFileData, &pLen);
+	KASSERT(ret > 0); KASSERT(exeFileData); KASSERT(pLen > 0);
+
+	struct Exe_Format exeFormat;
+	ret = Parse_ELF_Executable(exeFileData, pLen, &exeFormat);
+	KASSERT(!ret);
+
+	struct User_Context *pUserContext = NULL;
+	ret = Load_User_Program(exeFileData, pLen, &exeFormat,
+				command, &pUserContext);
+	KASSERT(!ret); KASSERT(pUserContext);
+
+	*pThread = Start_User_Thread(pUserContext, 0);
+	KASSERT(pThread);
+
+	return 0;
 }
 
 /*

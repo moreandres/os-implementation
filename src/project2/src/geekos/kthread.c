@@ -507,15 +507,16 @@ struct Kernel_Thread* Start_Kernel_Thread(
 struct Kernel_Thread*
 Start_User_Thread(struct User_Context* userContext, bool detached)
 {
-    /*
-     * Hints:
-     * - Use Create_Thread() to create a new "raw" thread object
-     * - Call Setup_User_Thread() to get the thread ready to
-     *   execute in user mode
-     * - Call Make_Runnable_Atomic() to schedule the process
-     *   for execution
-     */
-    TODO("Start user thread");
+	KASSERT(userContext);
+
+	struct Kernel_Thread * kThread = Create_Thread(0, 0);
+	KASSERT(kThread);
+
+	Setup_User_Thread(kThread, userContext);
+	
+	Make_Runnable_Atomic(kThread);
+	
+	return kThread;
 }
 
 /*
