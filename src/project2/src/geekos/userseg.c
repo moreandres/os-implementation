@@ -20,6 +20,7 @@
 #include <geekos/kthread.h>
 #include <geekos/argblock.h>
 #include <geekos/user.h>
+#include <geekos/errno.h>
 
 /* ----------------------------------------------------------------------
  * Variables
@@ -39,29 +40,36 @@
 
 static struct User_Context* Create_User_Context(ulong_t size)
 {
-	KASSERT(size > 0);
+  KASSERT(size % PAGE_SIZE == 0);
 
-	struct User_Context * context = Malloc(size);
-	KASSERT(context);
+  struct User_Context * context = NULL;
 
-	struct Segment_Descriptor* desc = Allocate_Segment_Descriptor();
-	KASSERT(desc);
+  context = Malloc(size);
+  if (!context)
+    goto out;
+
+  struct Segment_Descriptor* desc = Allocate_Segment_Descriptor();
+  if (!desc)
+    goto free;
 	
-	Init_LDT_Descriptor(desc, desc, 1);
+  Init_LDT_Descriptor(desc, desc, 1);
 
-	ushort_t selector = Selector(USER_PRIVILEGE, false, 1);
-	KASSERT(selector);
+  ushort_t selector = Selector(USER_PRIVILEGE, false, 1);
+  KASSERT(selector);
 
-	Init_Code_Segment_Descriptor(desc, 0x0, 1, USER_PRIVILEGE);
-	Init_Data_Segment_Descriptor(desc, 0x0, 1, USER_PRIVILEGE);
+  Init_Code_Segment_Descriptor(desc, 0x0, 1, USER_PRIVILEGE);
+  Init_Data_Segment_Descriptor(desc, 0x0, 1, USER_PRIVILEGE);
 
-	ushort_t code_selector = Selector(USER_PRIVILEGE, false, 1);
-	KASSERT(code_selector);
+  ushort_t code_selector = -1;
+  code_selector = Selector(USER_PRIVILEGE, false, 1);
+	
+  ushort_t data_selector = -1;
+  data_selector = Selector(USER_PRIVILEGE, false, 1);
 
-	ushort_t data_selector = Selector(USER_PRIVILEGE, false, 1);
-	KASSERT(data_selector);
-
-	return context;
+ free:
+  Free(context);
+ out:
+  return context;
 }
 
 static bool Validate_User_Memory(struct User_Context* userContext,
@@ -116,42 +124,52 @@ void Destroy_User_Context(struct User_Context* userContext)
  * Returns:
  *   0 if successful, or an error code (< 0) if unsuccessful
  */
-int Load_User_Program(char *exeFileData, ulong_t exeFileLength,
-    struct Exe_Format *exeFormat, const char *command,
-    struct User_Context **pUserContext)
+int Load_User_Program(char *exeFileData,
+		      ulong_t exeFileLength,
+		      struct Exe_Format *exeFormat,
+		      const char *command,
+		      struct User_Context **pUserContext)
 {
-	KASSERT(exeFileData); KASSERT(exeFileLength > 0); KASSERT(exeFormat);
-	KASSERT(command); KASSERT(pUserContext);
-	
-	int i = 0;
-	unsigned int highest = 0;
-	for (i = 0; exeFormat->numSegments; i++) {
-		if (exeFormat->segmentList[i].startAddress > highest)
-			highest = exeFormat->segmentList[i].startAddress;
-	}
-	KASSERT(highest > 0);
+  KASSERT(exeFileData); KASSERT(exeFileLength > 0); KASSERT(exeFormat);
+  KASSERT(command); KASSERT(pUserContext);
 
-	unsigned int numArgs = -1;
-	ulong_t argBlockSize = -1;
-	Get_Argument_Block_Size(command, &numArgs, &argBlockSize);
-	KASSERT(numArgs > 0); KASSERT(argBlockSize > 0);
+  int ret = EINVALID;
+  int i = 0;
 
-	unsigned int size = Round_Up_To_Page(highest);
-	KASSERT(size > 0);
+  unsigned int numArgs = -1;
+  ulong_t argBlockSize = -1;
 
-	size += DEFAULT_USER_STACK_SIZE;
-	KASSERT(size > 0);
+  unsigned int size = -1;
+  unsigned int highest = 0;
+  for (i = 0; exeFormat->numSegments; i++) {
+    if ((exeFormat->segmentList[i].startAddress +
+	 exeFormat->segmentList[i].sizeInMemory) > highest)
+	    
+      highest = exeFormat->segmentList[i].startAddress;
+  }
 
-	size += argBlockSize;
-	KASSERT(size > 0);
+  Get_Argument_Block_Size(command, &numArgs, &argBlockSize);
+  size = Round_Up_To_Page(highest +
+			  argBlockSize +
+			  DEFAULT_USER_STACK_SIZE);
 
-	*pUserContext = Create_User_Context(size);
+  *pUserContext = Create_User_Context(size);
+  if (*pUserContext) {
+    (*pUserContext)->entryAddr = exeFormat->entryAddr;
+    (*pUserContext)->argBlockAddr = highest;
+    (*pUserContext)->stackPointerAddr = highest + argBlockSize;
 
-	(*pUserContext)->entryAddr = exeFormat->entryAddr;
-	(*pUserContext)->argBlockAddr = 0x1000;
-	(*pUserContext)->stackPointerAddr = 0x1000;
+    for (i = 0; exeFormat->numSegments; i++) {
 
-	return 0;
+      memcpy(*pUserContext + exeFormat->segmentList[i].startAddress,
+	     exeFileData + exeFormat->segmentList[i].startAddress,
+	     exeFormat->segmentList[i].sizeInMemory);
+    }
+	  
+    ret = 0;
+  }
+
+  return ret;
 }
 
 /*

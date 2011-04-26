@@ -85,28 +85,41 @@ void Detach_User_Context(struct Kernel_Thread* kthread)
  */
 int Spawn(const char *program, const char *command, struct Kernel_Thread **pThread)
 {
-	KASSERT(program); KASSERT(command); KASSERT(pThread);
+  KASSERT(program); KASSERT(command); KASSERT(pThread);
 
-	int ret = ENOTFOUND;
-	void *exeFileData = NULL;
-	ulong_t pLen = -1;
-
-	ret = Read_Fully(program, &exeFileData, &pLen);
-	KASSERT(ret > 0); KASSERT(exeFileData); KASSERT(pLen > 0);
-
-	struct Exe_Format exeFormat;
-	ret = Parse_ELF_Executable(exeFileData, pLen, &exeFormat);
-	KASSERT(!ret);
-
-	struct User_Context *pUserContext = NULL;
-	ret = Load_User_Program(exeFileData, pLen, &exeFormat,
-				command, &pUserContext);
-	KASSERT(!ret); KASSERT(pUserContext);
-
+  int ret = ENOTFOUND;
+  ulong_t pLen = -1;
+  
+  void *exeFileData = NULL;
+  
+  struct Exe_Format exeFormat;
+  struct User_Context *pUserContext = NULL;
+  
+  ret = Read_Fully(program, &exeFileData, &pLen);
+  if (!ret) {
+    KASSERT(exeFileData); KASSERT(pLen > 0);
+    
+    ret = Parse_ELF_Executable(exeFileData, pLen, &exeFormat);
+    if (!ret) { 
+      ret = Load_User_Program(exeFileData,
+			      pLen,
+			      &exeFormat,
+			      command,
+			      &pUserContext);
+      if (!ret) {
+	KASSERT(pUserContext);
+	
 	*pThread = Start_User_Thread(pUserContext, 0);
-	KASSERT(pThread);
-
-	return 0;
+	
+	if (*pThread)
+	  ret = (*pThread)->pid;
+	
+	KASSERT(ret > 0);
+      }
+    }
+  }
+  
+  return ret;
 }
 
 /*
